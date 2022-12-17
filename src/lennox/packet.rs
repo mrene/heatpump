@@ -74,15 +74,15 @@ impl Packet {
     // Returns the temperature in Celsius, or None if it is only in fan mode
     pub fn temperature(&self) -> Option<u8> {
         if self.temperature_raw() == Packet::TEMP_NONE {
-            return None;
+            None
         } else {
-            return Some(self.temperature_raw() + 17);
+            Some(self.temperature_raw() + 17)
         }
     }
 
     pub fn set_temperature(&mut self, temp: Option<u8>) -> Result<(), EncodeError> {
         let temp = match temp {
-            Some(temp) if temp < 17 || temp > 30 => return Err(EncodeError::TemperatureOutOfRange),
+            Some(temp) if !(17..=30).contains(&temp) => return Err(EncodeError::TemperatureOutOfRange),
             Some(temp) => temp - 17,
             None => Packet::TEMP_NONE,
         };

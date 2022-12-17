@@ -54,7 +54,7 @@ impl Phy {
 
     pub fn decode(&self, pulses: impl Iterator<Item = Duration>) -> Result<u64, PhyError> {
         let pulses = self.codec.decode(pulses)?;
-        Ok(Phy::decode_bits(pulses.into_iter())?)
+        Ok(self.decode_pulses(pulses.into_iter())?)
     }
 
     pub fn encode_pulses(&self, bits: u64) -> Vec<PulseType> {
@@ -67,7 +67,7 @@ impl Phy {
     }
 
     /// Encode 48 bits into a sequence of pulses.
-    fn append_bits(bits: u64, long_ending: bool, mut pulses: &mut Vec<PulseType>) {
+    fn append_bits(bits: u64, long_ending: bool, pulses: &mut Vec<PulseType>) {
         pulses.push(PREAMBLE.0);
         pulses.push(PREAMBLE.1);
 
@@ -185,7 +185,7 @@ mod test {
             transport: Transport::Ir,
             pulses: encoded.into_iter().map(|x| Pulse { duration: x }).collect(),
         };
-        let recording_bytes = recording.to_bytes();
+        let _recording_bytes = recording.to_bytes();
         // assert_eq!(hex::encode(recording_bytes), off);
     }
 }

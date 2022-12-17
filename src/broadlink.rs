@@ -51,8 +51,6 @@ pub struct Recording {
 
 #[derive(Error, Debug, Copy, Clone)]
 pub enum ParseError {
-    #[error("unexpected sequence")]
-    UnexpectedSequence,
     #[error("invalid transport type: {0}")]
     InvalidTransport(u8),
 }

@@ -68,7 +68,7 @@ impl<T: Copy + Eq + Hash + std::fmt::Debug> Codec<T> {
             };
         }
 
-        return Ok(ret);
+        Ok(ret)
     }
 
     pub fn decode_pulse(&self, pulse: Duration) -> Result<T, CodecError<T>> {
