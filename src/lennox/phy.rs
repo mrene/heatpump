@@ -72,7 +72,7 @@ impl Phy {
         pulses.push(PREAMBLE.1);
 
         for bit in 0..48 {
-            let val = bits & (1 << 47 - bit) != 0;
+            let val = bits & (1 << (47 - bit)) != 0;
             match val {
                 // 0
                 true => {
