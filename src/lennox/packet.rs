@@ -204,7 +204,7 @@ mod tests {
         for &v in p.0.to_be_bytes().iter() {
             sum = sum.wrapping_add(rev(v) as _);
         }
-        rev(sum)
+        rev(u8::MAX - sum + 1)
     }
 
     #[test]
@@ -212,8 +212,6 @@ mod tests {
         let known_packets: &[u64; 7] = &[ 0xa12347ffffeb, 0xa1a347ffff6b, 0xa1a348ffff65, 0xa1a349ffff64, 0xa1a34affff66, 0xa1e34dffff20, 0xa1a34dffff60 ];
         let actual_checksums = known_packets.map(|p| Packet(p).checksum());
         let computed_checksums = known_packets.map(|p| checksum(&Packet(p)));
-
-        dbg!(actual_checksums.iter().zip(computed_checksums).map(|(&c,a)| c.checked_sub(a).unwrap_or(a.checked_sub(c).unwrap())).collect::<Vec<_>>());
         assert_eq!(actual_checksums, computed_checksums);
     }
 
