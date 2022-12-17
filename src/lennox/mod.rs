@@ -7,9 +7,11 @@ pub mod packet;
 #[derive(Debug, Clone, Parser)]
 pub struct ControlState {
     /// Power state
+    #[clap(short, long)]
     pub power: bool,
 
     /// Operating mode
+    #[clap(short, long)]
     pub mode: Mode,
 
     // Silence FP
@@ -25,9 +27,11 @@ pub struct ControlState {
     // pub turbo: bool,
 
     // Current set temperature in Celsius, or None if it is only in fan mode
+    #[clap(short, long)]
     pub temperature: Option<u8>,
 
     // Fan speed setting
+    #[clap(short, long)]
     pub fan: Fan,
 }
 

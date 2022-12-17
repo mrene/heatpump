@@ -1,6 +1,7 @@
 /** An IR PWM encoder/decoder with configurable pulse length */
 use std::{collections::HashMap, hash::Hash, time::Duration};
 
+use crate::lennox::PulseType;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -45,10 +46,13 @@ impl<T: Copy + Eq + Hash + std::fmt::Debug> Codec<T> {
     pub fn new(rules: impl Iterator<Item = (T, Rule)>) -> Self {
         let mut sorted_rules: Vec<_> = rules.collect();
         sorted_rules.sort_by_key(|f| f.1.duration);
-        
+
         let rules = sorted_rules.iter().copied().collect();
 
-        Self { sorted_rules, rules }
+        Self {
+            sorted_rules,
+            rules,
+        }
     }
 
     pub fn decode(
@@ -71,6 +75,19 @@ impl<T: Copy + Eq + Hash + std::fmt::Debug> Codec<T> {
         Ok(ret)
     }
 
+    pub(crate) fn chunk_pulses(pulses: impl Iterator<Item = T>) -> Vec<(T, T)> {
+        let mut pending: Option<T> = None;
+        pulses
+            .filter_map(|pulse| match pending.take() {
+                Some(p) => Some((p, pulse)),
+                None => {
+                    pending.replace(pulse);
+                    None
+                }
+            })
+            .collect()
+    }
+
     pub fn decode_pulse(&self, pulse: Duration) -> Result<T, CodecError<T>> {
         self.sorted_rules
             .iter()
@@ -79,10 +96,7 @@ impl<T: Copy + Eq + Hash + std::fmt::Debug> Codec<T> {
             .ok_or(CodecError::InvalidPulseLength(pulse))
     }
 
-    pub fn encode(
-        &self,
-        pulses: impl Iterator<Item = T>,
-    ) -> Result<Vec<Duration>, CodecError<T>> {
+    pub fn encode(&self, pulses: impl Iterator<Item = T>) -> Result<Vec<Duration>, CodecError<T>> {
         let mut ret = Vec::new();
 
         for p in pulses {
@@ -114,7 +128,7 @@ mod tests {
         ];
         Codec::new(rules.into_iter())
     }
-    
+
     #[test]
     fn test_decode() {
         let pulses = [100, 500, 100, 500, 500, 500, 500, 100].map(|d| Duration::from_micros(d));
@@ -133,9 +147,12 @@ mod tests {
     #[test]
     fn test_encode() {
         let pulses = [
-            Pulse::Short, Pulse::Long,
-            Pulse::Long, Pulse::Long,
-            Pulse::Long, Pulse::Short,
+            Pulse::Short,
+            Pulse::Long,
+            Pulse::Long,
+            Pulse::Long,
+            Pulse::Long,
+            Pulse::Short,
         ];
 
         let encoded = get_codec().encode(pulses.into_iter()).unwrap();

@@ -56,8 +56,7 @@ impl Packet {
     const FAN_MIN: u8 = 0b001;
     const FAN_MEDIUM: u8 = 0b010;
     const FAN_MAX: u8 = 0b011;
-    const FAN_AUTO: u8 = 0b100; 
-
+    const FAN_AUTO: u8 = 0b100;
 
     const ONES: u16 = 0xFFFF;
     const UNKNOWN: u8 = 0b010;
@@ -82,7 +81,9 @@ impl Packet {
 
     pub fn set_temperature(&mut self, temp: Option<u8>) -> Result<(), EncodeError> {
         let temp = match temp {
-            Some(temp) if !(17..=30).contains(&temp) => return Err(EncodeError::TemperatureOutOfRange),
+            Some(temp) if !(17..=30).contains(&temp) => {
+                return Err(EncodeError::TemperatureOutOfRange)
+            }
             Some(temp) => temp - 17,
             None => Packet::TEMP_NONE,
         };
@@ -133,7 +134,6 @@ impl Packet {
         })
     }
 
-
     fn compute_checksum(&self) -> u8 {
         // Adapted from https://github.com/efficks/lennoxir/blob/master/common.py
         let mut packet = Packet(self.0);
@@ -177,6 +177,10 @@ impl TryFrom<&Packet> for ControlState {
             || packet.unknown() != Packet::UNKNOWN
             || packet.ones() != Packet::ONES
         {
+            dbg!(packet.cmd_type());
+            dbg!(packet.unknown());
+            dbg!(packet.ones());
+
             return Err(EncodeError::UnexpectedFixedValues);
         }
 
@@ -197,11 +201,10 @@ fn rev(input: u8) -> u8 {
     let mut output: u8 = 0;
     for i in 0..8 {
         let is_set = (input & (1 << i)) != 0;
-        output |= (is_set as u8) << (7-i);
+        output |= (is_set as u8) << (7 - i);
     }
     output
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -233,9 +236,7 @@ mod tests {
 
     #[test]
     fn test_encode() {
-        let packets = [
-            Packet(0xa1a348ffff65),
-        ];
+        let packets = [Packet(0xa1a348ffff65)];
 
         for packet in packets.iter() {
             let state: ControlState = packet.try_into().unwrap();
@@ -247,7 +248,15 @@ mod tests {
 
     #[test]
     pub fn test_checksum() {
-        let known_packets: &[u64; 7] = &[ 0xa12347ffffeb, 0xa1a347ffff6b, 0xa1a348ffff65, 0xa1a349ffff64, 0xa1a34affff66, 0xa1e34dffff20, 0xa1a34dffff60 ];
+        let known_packets: &[u64; 7] = &[
+            0xa12347ffffeb,
+            0xa1a347ffff6b,
+            0xa1a348ffff65,
+            0xa1a349ffff64,
+            0xa1a34affff66,
+            0xa1e34dffff20,
+            0xa1a34dffff60,
+        ];
         let actual_checksums = known_packets.map(|p| Packet(p).checksum());
         let computed_checksums = known_packets.map(|p| Packet(p).compute_checksum());
         assert_eq!(actual_checksums, computed_checksums);

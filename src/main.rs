@@ -5,7 +5,7 @@ use clap::Parser;
 
 use crate::{
     broadlink::Recording,
-    lennox::{Phy, packet::Packet, ControlState},
+    lennox::{packet::Packet, ControlState, Phy},
 };
 
 mod broadlink;
@@ -19,10 +19,9 @@ struct Opts {
     subcmd: SubCommand,
 }
 
-
 #[derive(Clone, Parser, Debug)]
 enum SubCommand {
-    /// Decode hex-encoded commands in the broadlink format from stdin, and print them to stdout
+    /// Decode hex-encoded commands in the broadlink format from stdin, and print them to stdout
     Decode,
     SetState(ControlState),
 }
@@ -55,7 +54,10 @@ fn set_state(state: ControlState) -> anyhow::Result<()> {
     let recording = Recording {
         repeat_count: 0,
         transport: broadlink::Transport::Ir,
-        pulses: encoded.into_iter().map(|x| broadlink::Pulse { duration: x }).collect(),
+        pulses: encoded
+            .into_iter()
+            .map(|x| broadlink::Pulse { duration: x })
+            .collect(),
     };
     let recording_bytes = recording.to_bytes();
     println!("{}", hex::encode(recording_bytes));

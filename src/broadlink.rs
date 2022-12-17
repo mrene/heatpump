@@ -19,7 +19,9 @@ impl Pulse {
 
     pub fn from_broadlink(broadlink_pulse: u16) -> Self {
         // Round through float to avoid rounding errors in conversion
-        let duration = std::time::Duration::from_nanos(((broadlink_pulse as f64) * 8192000.0 / 269.0).round() as _);
+        let duration = std::time::Duration::from_nanos(
+            ((broadlink_pulse as f64) * 8192000.0 / 269.0).round() as _,
+        );
         Self { duration }
     }
 }
@@ -60,7 +62,6 @@ impl Recording {
         let mut b = BytesMut::new();
         b.put_u8(self.transport as u8);
         b.put_u8(self.repeat_count);
-        
 
         let mut pulses_buf = BytesMut::new();
         for pulse in &self.pulses {

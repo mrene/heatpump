@@ -29,15 +29,15 @@ impl Phy {
     pub fn new() -> Self {
         let codec = Codec::new(
             [
-                (PulseType::Short, Rule::new(Duration::from_micros(550))),
-                (PulseType::Long, Rule::new(Duration::from_micros(1550))),
+                (PulseType::Short, Rule::new(Duration::from_micros(500))),
+                (PulseType::Long, Rule::new(Duration::from_micros(1500))),
                 (
                     PulseType::FourThousand,
                     Rule::new(Duration::from_micros(4000)),
                 ),
                 (
                     PulseType::FiveThousand,
-                    Rule::new(Duration::from_micros(5150)),
+                    Rule::new(Duration::from_micros(5000)),
                 ),
                 (PulseType::Huge, Rule::new(Duration::from_millis(100))),
             ]
@@ -72,7 +72,7 @@ impl Phy {
         pulses.push(PREAMBLE.1);
 
         for bit in 0..48 {
-            let val = bits & (1 << bit) != 0;
+            let val = bits & (1 << 47-bit) != 0;
             match val {
                 // 0
                 true => {
@@ -168,6 +168,16 @@ mod test {
     use super::*;
 
     #[test]
+    fn test_encode_decode() {
+        let msg = 0x1234;
+        let phy = Phy::new();
+        let pulses = phy.encode_pulses(msg);
+        let pulses = Codec::chunk_pulses(pulses.into_iter());
+        let decoded = phy.decode_pulses(pulses.into_iter()).unwrap();
+        assert_eq!(msg, decoded);
+    }
+
+    #[test]
     fn test_decode() {
         const MSG: u64 = 0xa12347ffffeb;
         let off = include_str!("../../captures/off.ir");
@@ -179,13 +189,22 @@ mod test {
             .unwrap();
         assert_eq!(msg, MSG);
 
+        /////////////
+
         let encoded = phy.encode(MSG).unwrap();
         let recording = Recording {
             repeat_count: 0,
             transport: Transport::Ir,
             pulses: encoded.into_iter().map(|x| Pulse { duration: x }).collect(),
         };
-        let _recording_bytes = recording.to_bytes();
-        // assert_eq!(hex::encode(recording_bytes), off);
+        let recording_bytes = recording.to_bytes();
+
+        /////////////
+        let recording = Recording::from_bytes(recording_bytes).unwrap();
+        let phy = Phy::new();
+        let msg = phy
+            .decode(recording.pulses.iter().map(|x| x.duration))
+            .unwrap();
+        assert_eq!(msg, MSG);
     }
 }
