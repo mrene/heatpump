@@ -1,5 +1,6 @@
 use super::{ControlState, Fan, Mode};
 use bitfield::bitfield;
+use rbroadlink::network::util::checksum;
 use thiserror::Error;
 
 #[derive(Error, Clone, Copy, Debug)]
@@ -15,6 +16,8 @@ pub enum EncodeError {
 
     #[error("Unexpected fixed value in packet.")]
     UnexpectedFixedValues,
+    #[error("Checksum mismatch")]
+    ChecksumMismatch,
 }
 
 bitfield! {
@@ -31,6 +34,14 @@ bitfield! {
     pub u8, checksum, set_checksum : 7, 0;
 }
 
+impl Clone for Packet {
+    fn clone(&self) -> Self {
+        Packet(self.0)
+    }
+}
+
+impl Copy for Packet {}
+
 impl Packet {
     const TEMP_NONE: u8 = 0b1110;
 
@@ -46,6 +57,8 @@ impl Packet {
     const FAN_MEDIUM: u8 = 0b010;
     const FAN_MAX: u8 = 0b011;
     const FAN_AUTO: u8 = 0b100;
+    const FAN_ZERO: u8 = 0b000;
+
 
     const ONES: u16 = 0xFFFF;
     const UNKNOWN: u8 = 0b010;
@@ -102,6 +115,7 @@ impl Packet {
 
     pub fn fan(&self) -> Result<Fan, EncodeError> {
         Ok(match self.fan_raw() {
+            Packet::FAN_ZERO => Fan::Zero,
             Packet::FAN_MIN => Fan::Min,
             Packet::FAN_MEDIUM => Fan::Medium,
             Packet::FAN_MAX => Fan::Max,
@@ -112,33 +126,53 @@ impl Packet {
 
     pub fn set_fan(&mut self, fan: Fan) {
         self.set_fan_raw(match fan {
+            Fan::Zero => Packet::FAN_ZERO,
             Fan::Min => Packet::FAN_MIN,
             Fan::Medium => Packet::FAN_MEDIUM,
             Fan::Max => Packet::FAN_MAX,
             Fan::Auto => Packet::FAN_AUTO,
         })
     }
+
+
+    fn compute_checksum(&self) -> u8 {
+        let mut packet = Packet(self.0);
+        packet.set_checksum(0);
+
+        let mut sum: u8 = 0x00;
+        for &v in packet.0.to_be_bytes().iter() {
+            sum = sum.wrapping_add(rev(v) as _);
+        }
+        rev(u8::MAX - sum + 1)
+    }
+
+    fn apply_checksum(&mut self) {
+        self.set_checksum(self.compute_checksum());
+    }
+
+    fn validate_checksum(&self) -> bool {
+        self.compute_checksum() == self.checksum()
+    }
 }
 
-impl TryFrom<ControlState> for Packet {
+impl TryFrom<&ControlState> for Packet {
     type Error = EncodeError;
 
-    fn try_from(state: ControlState) -> Result<Self, EncodeError> {
+    fn try_from(state: &ControlState) -> Result<Self, EncodeError> {
         let mut packet = Packet::new();
         packet.set_temperature(state.temperature)?;
         packet.set_power(state.power);
         packet.set_mode(state.mode);
         packet.set_fan(state.fan);
-        // TODO: Compute checksum
-        packet.set_checksum(0);
+        packet.apply_checksum();
         Ok(packet)
     }
 }
 
-impl TryFrom<Packet> for ControlState {
+impl TryFrom<&Packet> for ControlState {
     type Error = EncodeError;
 
-    fn try_from(packet: Packet) -> Result<Self, EncodeError> {
+    fn try_from(packet: &Packet) -> Result<Self, EncodeError> {
         if packet.cmd_type() != Packet::CMD_TYPE
             || packet.unknown() != Packet::UNKNOWN
             || packet.ones() != Packet::ONES
@@ -146,18 +180,28 @@ impl TryFrom<Packet> for ControlState {
             return Err(EncodeError::UnexpectedFixedValues);
         }
 
+        if !packet.validate_checksum() {
+            return Err(EncodeError::ChecksumMismatch);
+        }
+
         Ok(ControlState {
             power: packet.power(),
             mode: packet.mode()?,
             fan: packet.fan()?,
-            // silence: false,
-            // timer: false,
-            // led: false,
-            // turbo: false,
             temperature: packet.temperature(),
         })
     }
 }
+
+fn rev(input: u8) -> u8 {
+    let mut output: u8 = 0;
+    for i in 0..8 {
+        let is_set = (input & (1 << i)) != 0;
+        output |= (is_set as u8) << (7-i);
+    }
+    output
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -183,35 +227,29 @@ mod tests {
         assert_eq!(Packet(0xa1a34dffff60).temperature(), Some(30));
 
         dbg!(Packet(0xa1a34dffff60));
-        let state: ControlState = Packet(0xa1a34dffff60).try_into().unwrap();
+        let state: ControlState = (&Packet(0xa1a34dffff60)).try_into().unwrap();
         dbg!(state);
     }
 
-    fn rev(input: u8) -> u8 {
-        let mut output: u8 = 0;
-        for i in 0..8 {
-            let is_set = (input & (1 << i)) != 0;
-            output |= (is_set as u8) << (7-i);
-        }
-        output
-    }
+    #[test]
+    fn test_encode() {
+        let packets = [
+            Packet(0xa1a348ffff65),
+        ];
 
-    fn checksum(p: &Packet) -> u8 {
-        let mut p = Packet(p.0);
-        p.set_checksum(0);
-
-        let mut sum: u8 = 0x00;
-        for &v in p.0.to_be_bytes().iter() {
-            sum = sum.wrapping_add(rev(v) as _);
+        for packet in packets.iter() {
+            let state: ControlState = packet.try_into().unwrap();
+            let packet2: Packet = (&state).try_into().unwrap();
+            dbg!(state);
+            assert_eq!(packet.0, packet2.0);
         }
-        rev(u8::MAX - sum + 1)
     }
 
     #[test]
     pub fn test_checksum() {
         let known_packets: &[u64; 7] = &[ 0xa12347ffffeb, 0xa1a347ffff6b, 0xa1a348ffff65, 0xa1a349ffff64, 0xa1a34affff66, 0xa1e34dffff20, 0xa1a34dffff60 ];
         let actual_checksums = known_packets.map(|p| Packet(p).checksum());
-        let computed_checksums = known_packets.map(|p| checksum(&Packet(p)));
+        let computed_checksums = known_packets.map(|p| Packet(p).compute_checksum());
         assert_eq!(actual_checksums, computed_checksums);
     }
 

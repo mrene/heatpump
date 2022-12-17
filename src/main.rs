@@ -2,6 +2,8 @@ use std::io::{self, Write};
 
 use bytes::Bytes;
 
+use crate::lennox::{packet::Packet, ControlState};
+
 mod broadlink;
 mod lennox;
 mod pwm;
@@ -19,6 +21,10 @@ fn main() -> anyhow::Result<()> {
 
         let msg = phy.decode(recording.pulses.iter().map(|x| x.duration))?;
         println!("{:x} {:b}", msg, msg);
+
+        let packet = Packet(msg);
+        let state = TryInto::<ControlState>::try_into(&packet);
+        println!("{:?}", state);
         io::stdout().flush()?;
     }
 

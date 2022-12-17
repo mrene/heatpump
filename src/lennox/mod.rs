@@ -34,7 +34,8 @@ pub enum Fan {
     Min,
     Medium,
     Max,
-    Auto
+    Auto,
+    Zero,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
