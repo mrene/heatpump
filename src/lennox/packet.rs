@@ -200,11 +200,11 @@ mod tests {
         let mut p = Packet(p.0);
         p.set_checksum(0);
 
-        let mut sum: u64 = 0x00;
+        let mut sum: u8 = 0x00;
         for &v in p.0.to_be_bytes().iter() {
             sum = sum.wrapping_add(rev(v) as _);
         }
-        rev((256 - sum % 256) as u8)
+        rev(sum)
     }
 
     #[test]
