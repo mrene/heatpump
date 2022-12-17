@@ -45,8 +45,9 @@ impl<T: Copy + Eq + Hash + std::fmt::Debug> Codec<T> {
     pub fn new(rules: impl Iterator<Item = (T, Rule)>) -> Self {
         let mut sorted_rules: Vec<_> = rules.collect();
         sorted_rules.sort_by_key(|f| f.1.duration);
-
+        
         let rules = sorted_rules.iter().copied().collect();
+
         Self { sorted_rules, rules }
     }
 
@@ -70,6 +71,14 @@ impl<T: Copy + Eq + Hash + std::fmt::Debug> Codec<T> {
         return Ok(ret);
     }
 
+    pub fn decode_pulse(&self, pulse: Duration) -> Result<T, CodecError<T>> {
+        self.sorted_rules
+            .iter()
+            .find(|(_, r)| r.matches(pulse))
+            .map(|(p, _)| *p)
+            .ok_or(CodecError::InvalidPulseLength(pulse))
+    }
+
     pub fn encode(
         &self,
         pulses: impl Iterator<Item = T>,
@@ -81,14 +90,6 @@ impl<T: Copy + Eq + Hash + std::fmt::Debug> Codec<T> {
         }
 
         Ok(ret)
-    }
-
-    pub fn decode_pulse(&self, pulse: Duration) -> Result<T, CodecError<T>> {
-        self.sorted_rules
-            .iter()
-            .find(|(_, r)| r.matches(pulse))
-            .map(|(p, _)| *p)
-            .ok_or(CodecError::InvalidPulseLength(pulse))
     }
 
     pub fn encode_pulse(&self, pulse: T) -> Option<Duration> {

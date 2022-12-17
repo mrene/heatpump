@@ -86,6 +86,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "99528ca30abb9495c7e106bf7c3177b257c62040fc0f2909fe470b0f43097296"
 
 [[package]]
+name = "bitfield"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d7e60934ceec538daadb9d8432424ed043a904d8e0243f3c6446bce549a46ac"
+
+[[package]]
 name = "bitvec"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -303,6 +309,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bit_reverse",
+ "bitfield",
  "bytes",
  "hex",
  "hex-literal",
