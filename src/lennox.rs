@@ -1,17 +1,12 @@
-use crate::broadlink::Pulse;
+use crate::{
+    broadlink::Pulse,
+    pwm::{Codec, CodecError, Rule},
+};
 
 use std::time::Duration;
 use thiserror::Error;
 
-const TIME_SHORT: Duration = Duration::from_micros(550);
-const TIME_LONG: Duration = Duration::from_micros(1550);
-const TIME_4000: Duration = Duration::from_micros(4000);
-const TIME_5000: Duration = Duration::from_micros(5150);
-
-// This one seem to be artifacts of the recording process
-const TIME_HUGE: Duration = Duration::from_millis(100);
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum PulseType {
     Short,
     Long,
@@ -20,82 +15,140 @@ pub enum PulseType {
     Huge,
 }
 
-pub struct PWMDecoder;
-
 #[derive(Error, Debug, Copy, Clone)]
-pub enum PWMError {
-    #[error("the pulse list was missing an off pulse value")]
-    MissingOffPulse,
-    #[error("invalid pulse length: {0:?}")]
-    InvalidPulseLength(Duration),
+pub enum PhyError {
+    #[error("PWM error: {0}")]
+    PWMError(#[from] CodecError<PulseType>),
+    #[error("Decode error: {0}")]
+    DecodeError(#[from] DecodeError),
 }
 
-impl PWMDecoder {
-    pub fn decode<'a>(
-        &self,
-        mut raw_pulses: impl Iterator<Item = &'a Pulse>,
-    ) -> Result<Vec<(PulseType, PulseType)>, PWMError> {
-        let mut pulses = Vec::new();
+const PREAMBLE: (PulseType, PulseType) = (PulseType::FourThousand, PulseType::FourThousand);
 
-        // Pulses are encoded with time on and time off, zip them so we can process them together
-        while let Some(on) = raw_pulses.next() {
-            let off = raw_pulses.next().ok_or(PWMError::MissingOffPulse)?;
-            // println!(
-            //     "on: {} off: {}",
-            //     on.duration.as_micros(),
-            //     off.duration.as_micros()
-            // );
-            let on = PWMDecoder::match_pulse(on)?;
-            let off = PWMDecoder::match_pulse(off)?;
-            // println!("on: {:?} off: {:?}", on, off);
-            pulses.push((on, off));
-        }
+pub struct Phy {
+    codec: Codec<PulseType>,
+}
+impl Phy {
+    pub fn new() -> Self {
+        let codec = Codec::new(
+            [
+                (PulseType::Short, Rule::new(Duration::from_micros(550))),
+                (PulseType::Long, Rule::new(Duration::from_micros(1550))),
+                (
+                    PulseType::FourThousand,
+                    Rule::new(Duration::from_micros(4000)),
+                ),
+                (
+                    PulseType::FiveThousand,
+                    Rule::new(Duration::from_micros(5150)),
+                ),
+                (PulseType::Huge, Rule::new(Duration::from_millis(100))),
+            ]
+            .into_iter(),
+        );
 
-        Ok(pulses)
+        Self { codec }
     }
 
-    fn match_pulse(pulse: &Pulse) -> Result<PulseType, PWMError> {
-        if pulse
-            .duration
-            .within_bounds(&TIME_SHORT, &Duration::from_micros(200))
-        {
-            Ok(PulseType::Short)
-        } else if pulse
-            .duration
-            .within_bounds(&TIME_LONG, &Duration::from_micros(500))
-        {
-            Ok(PulseType::Long)
-        } else if pulse
-            .duration
-            .within_bounds(&TIME_4000, &Duration::from_micros(500))
-        {
-            Ok(PulseType::FourThousand)
-        } else if pulse
-            .duration
-            .within_bounds(&TIME_5000, &Duration::from_micros(500))
-        {
-            Ok(PulseType::FiveThousand)
-        } else if pulse
-            .duration
-            .within_bounds(&TIME_HUGE, &Duration::from_micros(2000))
-        {
-            Ok(PulseType::Huge)
+    pub fn encode(&self, bits: u64) -> Result<Vec<Duration>, PhyError> {
+        let pulses = self.encode_pulses(bits);
+        Ok(self.codec.encode(pulses.into_iter())?)
+    }
+
+    pub fn decode(&self, pulses: impl Iterator<Item = Duration>) -> Result<u64, PhyError> {
+        let pulses = self.codec.decode(pulses)?;
+        Ok(Phy::decode_bits(pulses.into_iter())?)
+    }
+
+    pub fn encode_pulses(&self, bits: u64) -> Vec<PulseType> {
+        let mut pulses = Vec::with_capacity(2 * (48 * 2 + 2));
+
+        Phy::append_bits(bits, false, &mut pulses);
+        Phy::append_bits(bits ^ 0xFFFF_FFFF_FFFF, false, &mut pulses);
+
+        pulses
+    }
+
+    /// Encode 48 bits into a sequence of pulses.
+    fn append_bits(bits: u64, long_ending: bool, mut pulses: &mut Vec<PulseType>) {
+        pulses.push(PREAMBLE.0);
+        pulses.push(PREAMBLE.1);
+
+        for bit in 0..48 {
+            let val = bits & (1 << bit) != 0;
+            match val {
+                // 0
+                true => {
+                    pulses.push(PulseType::Short);
+                    pulses.push(PulseType::Long);
+                }
+
+                // 1
+                false => {
+                    pulses.push(PulseType::Short);
+                    pulses.push(PulseType::Short);
+                }
+            }
+        }
+
+        pulses.push(PulseType::Short);
+        pulses.push(if long_ending {
+            PulseType::Huge
         } else {
-            Err(PWMError::InvalidPulseLength(pulse.duration))
-        }
+            PulseType::FiveThousand
+        });
     }
-}
 
-pub trait TimingWithinBounds {
-    fn within_bounds(&self, other: &Self, tolerance: &Self) -> bool;
-}
+    fn decode_bits(
+        mut pulses: impl Iterator<Item = (PulseType, PulseType)>,
+    ) -> Result<u64, DecodeError> {
+        use PulseType::*;
 
-impl TimingWithinBounds for Duration {
-    fn within_bounds(&self, other: &Self, tolerance: &Self) -> bool {
-        let diff = self
-            .checked_sub(*other)
-            .unwrap_or_else(|| other.checked_sub(*self).unwrap());
-        diff <= *tolerance
+        Phy::assert_preamble(&mut pulses)?;
+
+        let mut ret: u64 = 0;
+        for pulse in pulses {
+            match pulse {
+                (Short, Short) => {
+                    // Append 0
+                    ret <<= 1;
+                }
+                (Short, Long) => {
+                    // Append 1
+                    ret <<= 1;
+                    ret |= 1;
+                }
+                (Short, FiveThousand | Huge) => break,
+                any => return Err(DecodeError::InvalidCombination(any)),
+            }
+        }
+        Ok(ret)
+    }
+
+    fn assert_preamble(
+        mut pulses: impl Iterator<Item = (PulseType, PulseType)>,
+    ) -> Result<(), DecodeError> {
+        let next = pulses.next().ok_or(DecodeError::TruncatedMessage)?;
+        if next != PREAMBLE {
+            dbg!(next);
+            return Err(DecodeError::InvalidPreamble);
+        }
+
+        Ok(())
+    }
+
+    pub fn decode_pulses(
+        &self,
+        mut pulses: impl Iterator<Item = (PulseType, PulseType)>,
+    ) -> Result<u64, DecodeError> {
+        let bits = Phy::decode_bits(&mut pulses)?;
+        let repeated = Phy::decode_bits(&mut pulses)?;
+
+        if bits ^ repeated != 0xFFFF_FFFF_FFFF {
+            return Err(DecodeError::RepeatMismatch);
+        }
+
+        Ok(bits)
     }
 }
 
@@ -111,53 +164,18 @@ pub enum DecodeError {
     TruncatedMessage,
 }
 
-fn decode_bits(
-    mut pulses: impl Iterator<Item = (PulseType, PulseType)>,
-) -> Result<u64, DecodeError> {
-    use PulseType::*;
+#[cfg(test)]
+mod test {
+    use super::*;
 
-    assert_preamble(&mut pulses)?;
-
-    let mut ret: u64 = 0;
-    println!("DEC: ");
-    for pulse in pulses {
-        match pulse {
-            (Short, Short) => {
-                ret <<= 1;
-            }
-            (Short, Long) => {
-                ret <<= 1;
-                ret |= 1;
-            }
-            (Short, FiveThousand | Huge) => break,
-            comb => return Err(DecodeError::InvalidCombination(comb)),
-        }
+    #[test]
+    fn test_decode() {
+        let off = include_str!("../captures/off.ir");
+        let message =
+            crate::broadlink::Recording::from_bytes(hex::decode(off).unwrap().into()).unwrap();
+        let msg = Phy::new()
+            .decode(message.pulses.iter().map(|x| x.duration))
+            .unwrap();
+        assert_eq!(msg, 0xa12347ffffeb)
     }
-    println!();
-    Ok(ret)
-}
-
-fn assert_preamble(
-    mut pulses: impl Iterator<Item = (PulseType, PulseType)>,
-) -> Result<(), DecodeError> {
-    use PulseType::*;
-
-    if pulses.next().ok_or(DecodeError::TruncatedMessage)? != (FourThousand, FourThousand) {
-        return Err(DecodeError::InvalidPreamble);
-    }
-
-    Ok(())
-}
-
-pub fn decode_message(
-    mut pulses: impl Iterator<Item = (PulseType, PulseType)>,
-) -> Result<u64, DecodeError> {
-    let bits = decode_bits(&mut pulses)?;
-    let repeated = decode_bits(&mut pulses)?;
-
-    if bits ^ repeated != 0xFFFF_FFFF_FFFF {
-        return Err(DecodeError::RepeatMismatch);
-    }
-
-    Ok(bits)
 }
