@@ -23,22 +23,23 @@ struct Opts {
 enum SubCommand {
     /// Decode hex-encoded commands in the broadlink format from stdin, and print them to stdout
     Decode,
+
+    /// Encodes a state message from the given arguments, outputs it to stdout in broadlink hex format
     SetState(ControlState),
 }
 
+/// Read hex-encoded messages from stdin, convert them and print their decoded u64 hex value
 fn decode() -> anyhow::Result<()> {
-    // Read hex-encoded messages from stdin, convert them and print their decoded u64 hex value
-
     let phy = Phy::new();
 
     let stdin = std::io::stdin();
     for line in stdin.lines() {
         let recording = Recording::from_bytes(Bytes::copy_from_slice(&hex::decode(line?)?))?;
         let msg = phy.decode(recording.pulses.iter().copied())?;
-        println!("{:x} {:b}", msg, msg);
+        println!("Recv: {:x} {:b}", msg, msg);
 
-        let state: Result<ControlState, _> = (&Packet(msg)).try_into();
-        println!("{:?}", state);
+        let state = Packet(msg).to_control_state();
+        println!("Decode: {:?}", state);
 
         io::stdout().flush()?;
     }
@@ -46,17 +47,12 @@ fn decode() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Encode ControlState into a broadlink-formatted message, and print it to stdout
 fn set_state(state: ControlState) -> anyhow::Result<()> {
-    // Encode ControlState into a broadlink-formatted message, and print it to stdout
-    let packet: Packet = (&state).try_into()?;
-    let phy = Phy::new();
-    let pulses = phy.encode(packet.0)?;
-    let recording = Recording {
-        repeat_count: 0,
-        transport: broadlink::Transport::Ir,
-        pulses,
-    };
-    let recording_bytes = recording.to_bytes();
+    let packet: Packet = Packet::from_control_state(&state)?;
+    let pulses = Phy::new().encode(packet.0)?;
+    let recording_bytes = Recording::new_ir(pulses).to_bytes();
+
     println!("{}", hex::encode(recording_bytes));
 
     Ok(())

@@ -59,6 +59,15 @@ pub enum ParseError {
 }
 
 impl Recording {
+
+    pub fn new_ir(pulses: Vec<Duration>) -> Self {
+        Self {
+            repeat_count: 0,
+            transport: Transport::Ir,
+            pulses,
+        }
+    }
+
     pub fn to_bytes(&self) -> Bytes {
         let mut b = BytesMut::new();
         b.put_u8(self.transport as u8);

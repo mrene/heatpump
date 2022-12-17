@@ -70,6 +70,36 @@ impl Packet {
         p
     }
 
+    pub fn from_control_state(state: &ControlState) -> Result<Self, EncodeError> {
+        let mut packet = Self::new();
+        packet.set_temperature(state.temperature)?;
+        packet.set_power(state.power);
+        packet.set_mode(state.mode);
+        packet.set_fan(state.fan);
+        packet.apply_checksum();
+        Ok(packet)
+    }
+
+    pub fn to_control_state(self) -> Result<ControlState, EncodeError> {
+        if self.cmd_type() != Packet::CMD_TYPE
+            || self.unknown() != Packet::UNKNOWN
+            || self.ones() != Packet::ONES
+        {
+            return Err(EncodeError::UnexpectedFixedValues);
+        }
+
+        if !self.validate_checksum() {
+            return Err(EncodeError::ChecksumMismatch);
+        }
+
+        Ok(ControlState {
+            power: self.power(),
+            mode: self.mode()?,
+            fan: self.fan()?,
+            temperature: self.temperature(),
+        })
+    }
+
     // Returns the temperature in Celsius, or None if it is only in fan mode
     pub fn temperature(&self) -> Option<u8> {
         if self.temperature_raw() == Packet::TEMP_NONE {
@@ -155,45 +185,19 @@ impl Packet {
     }
 }
 
-impl TryFrom<&ControlState> for Packet {
+impl TryFrom<ControlState> for Packet {
     type Error = EncodeError;
 
-    fn try_from(state: &ControlState) -> Result<Self, EncodeError> {
-        let mut packet = Packet::new();
-        packet.set_temperature(state.temperature)?;
-        packet.set_power(state.power);
-        packet.set_mode(state.mode);
-        packet.set_fan(state.fan);
-        packet.apply_checksum();
-        Ok(packet)
+    fn try_from(state: ControlState) -> Result<Self, EncodeError> {
+        Self::from_control_state(&state)
     }
 }
 
-impl TryFrom<&Packet> for ControlState {
+impl TryFrom<Packet> for ControlState {
     type Error = EncodeError;
 
-    fn try_from(packet: &Packet) -> Result<Self, EncodeError> {
-        if packet.cmd_type() != Packet::CMD_TYPE
-            || packet.unknown() != Packet::UNKNOWN
-            || packet.ones() != Packet::ONES
-        {
-            dbg!(packet.cmd_type());
-            dbg!(packet.unknown());
-            dbg!(packet.ones());
-
-            return Err(EncodeError::UnexpectedFixedValues);
-        }
-
-        if !packet.validate_checksum() {
-            return Err(EncodeError::ChecksumMismatch);
-        }
-
-        Ok(ControlState {
-            power: packet.power(),
-            mode: packet.mode()?,
-            fan: packet.fan()?,
-            temperature: packet.temperature(),
-        })
+    fn try_from(packet: Packet) -> Result<Self, EncodeError> {
+        packet.to_control_state()
     }
 }
 
@@ -230,7 +234,7 @@ mod tests {
         assert_eq!(Packet(0xa1a34dffff60).temperature(), Some(30));
 
         dbg!(Packet(0xa1a34dffff60));
-        let state: ControlState = (&Packet(0xa1a34dffff60)).try_into().unwrap();
+        let state: ControlState = Packet(0xa1a34dffff60).to_control_state().unwrap();
         dbg!(state);
     }
 
@@ -239,9 +243,8 @@ mod tests {
         let packets = [Packet(0xa1a348ffff65)];
 
         for packet in packets.iter() {
-            let state: ControlState = packet.try_into().unwrap();
-            let packet2: Packet = (&state).try_into().unwrap();
-            dbg!(state);
+            let state: ControlState = packet.to_control_state().unwrap();
+            let packet2: Packet = Packet::from_control_state(&state).unwrap();
             assert_eq!(packet.0, packet2.0);
         }
     }
