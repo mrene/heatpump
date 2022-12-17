@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 /**
  * Implements encoding/decoding of payloads sent to a broadlink IR device
  * Inspired from: https://github.com/haimkastner/broadlink-ir-converter/blob/master/src/index.ts
@@ -6,23 +8,22 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use thiserror::Error;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Pulse {
-    pub duration: std::time::Duration,
+trait BroadlinkDuration {
+    fn to_broadlink(self) -> u16;
+    fn from_broadlink(broadlink_pulse: u16) -> Self;
 }
 
-impl Pulse {
-    pub fn to_broadlink(self) -> u16 {
+impl BroadlinkDuration for std::time::Duration {
+    fn to_broadlink(self) -> u16 {
         // Round through float to avoid rounding errors in conversion
-        (self.duration.as_micros() as f64 * 269.0 / 8192.0).round() as u16
+        (self.as_micros() as f64 * 269.0 / 8192.0).round() as u16
     }
 
-    pub fn from_broadlink(broadlink_pulse: u16) -> Self {
+    fn from_broadlink(broadlink_pulse: u16) -> Self {
         // Round through float to avoid rounding errors in conversion
-        let duration = std::time::Duration::from_nanos(
-            ((broadlink_pulse as f64) * 8192000.0 / 269.0).round() as _,
-        );
-        Self { duration }
+        Self::from_nanos(
+            ((broadlink_pulse as f64) * 8192000.0 / 269.0).round() as _
+        )
     }
 }
 
@@ -48,7 +49,7 @@ pub struct Recording {
     pub repeat_count: u8,
     pub transport: Transport,
     // On-off pulse durations
-    pub pulses: Vec<Pulse>,
+    pub pulses: Vec<Duration>,
 }
 
 #[derive(Error, Debug, Copy, Clone)]
@@ -104,7 +105,7 @@ impl Recording {
                 remain -= 2;
             }
 
-            pulses.push(Pulse::from_broadlink(value));
+            pulses.push(Duration::from_broadlink(value));
         }
 
         Ok(Recording {
@@ -144,7 +145,7 @@ mod test {
 
         for (i, (pulse, &ref_pulse)) in decoded.pulses.iter().zip(pulses.iter()).enumerate() {
             assert_eq!(
-                pulse.duration.as_micros() as u16,
+                pulse.as_micros() as u16,
                 ref_pulse,
                 "pulse {} does not match",
                 i

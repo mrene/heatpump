@@ -1,7 +1,5 @@
 /** An IR PWM encoder/decoder with configurable pulse length */
 use std::{collections::HashMap, hash::Hash, time::Duration};
-
-use crate::lennox::PulseType;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]

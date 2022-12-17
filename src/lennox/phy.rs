@@ -72,7 +72,7 @@ impl Phy {
         pulses.push(PREAMBLE.1);
 
         for bit in 0..48 {
-            let val = bits & (1 << 47-bit) != 0;
+            let val = bits & (1 << 47 - bit) != 0;
             match val {
                 // 0
                 true => {
@@ -163,7 +163,7 @@ pub enum DecodeError {
 
 #[cfg(test)]
 mod test {
-    use crate::broadlink::{Pulse, Recording, Transport};
+    use crate::broadlink::{Recording, Transport};
 
     use super::*;
 
@@ -184,27 +184,23 @@ mod test {
         let message = Recording::from_bytes(hex::decode(off).unwrap().into()).unwrap();
 
         let phy = Phy::new();
-        let msg = phy
-            .decode(message.pulses.iter().map(|x| x.duration))
-            .unwrap();
+        let msg = phy.decode(message.pulses.into_iter()).unwrap();
         assert_eq!(msg, MSG);
 
         /////////////
 
-        let encoded = phy.encode(MSG).unwrap();
+        let pulses = phy.encode(MSG).unwrap();
         let recording = Recording {
             repeat_count: 0,
             transport: Transport::Ir,
-            pulses: encoded.into_iter().map(|x| Pulse { duration: x }).collect(),
+            pulses,
         };
         let recording_bytes = recording.to_bytes();
 
         /////////////
         let recording = Recording::from_bytes(recording_bytes).unwrap();
         let phy = Phy::new();
-        let msg = phy
-            .decode(recording.pulses.iter().map(|x| x.duration))
-            .unwrap();
+        let msg = phy.decode(recording.pulses.into_iter()).unwrap();
         assert_eq!(msg, MSG);
     }
 }

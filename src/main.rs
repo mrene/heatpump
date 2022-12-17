@@ -34,7 +34,7 @@ fn decode() -> anyhow::Result<()> {
     let stdin = std::io::stdin();
     for line in stdin.lines() {
         let recording = Recording::from_bytes(Bytes::copy_from_slice(&hex::decode(line?)?))?;
-        let msg = phy.decode(recording.pulses.iter().map(|x| x.duration))?;
+        let msg = phy.decode(recording.pulses.iter().copied())?;
         println!("{:x} {:b}", msg, msg);
 
         let state: Result<ControlState, _> = (&Packet(msg)).try_into();
@@ -50,14 +50,11 @@ fn set_state(state: ControlState) -> anyhow::Result<()> {
     // Encode ControlState into a broadlink-formatted message, and print it to stdout
     let packet: Packet = (&state).try_into()?;
     let phy = Phy::new();
-    let encoded = phy.encode(packet.0)?;
+    let pulses = phy.encode(packet.0)?;
     let recording = Recording {
         repeat_count: 0,
         transport: broadlink::Transport::Ir,
-        pulses: encoded
-            .into_iter()
-            .map(|x| broadlink::Pulse { duration: x })
-            .collect(),
+        pulses,
     };
     let recording_bytes = recording.to_bytes();
     println!("{}", hex::encode(recording_bytes));

@@ -9,3 +9,4 @@ for line in sys.stdin:
     data = bytearray.fromhex(line.rstrip())
     dev.send_data(data)
     print('Sent')
+    
