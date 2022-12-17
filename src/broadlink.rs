@@ -41,6 +41,7 @@ Offset	Contents
 0x08 ....	Pulse lengths in 2^-15 s units (µs * 269 / 8192 works very well)
 ....	For IR codes, the pulse lengths should be paired as ON, OFF
  */
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Recording {
     pub repeat_count: u8,
     pub transport: Transport,
