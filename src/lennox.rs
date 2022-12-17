@@ -1,5 +1,5 @@
-use crate::broadlink::{Pulse};
-use bytes::{Bytes, BytesMut};
+use crate::broadlink::Pulse;
+
 use std::time::Duration;
 use thiserror::Error;
 
@@ -116,24 +116,24 @@ fn decode_bits(
 ) -> Result<u64, DecodeError> {
     use PulseType::*;
 
+    assert_preamble(&mut pulses)?;
+
     let mut ret: u64 = 0;
     println!("DEC: ");
-    while let Some(pulse) = pulses.next() {
+    for pulse in pulses {
         match pulse {
             (Short, Short) => {
                 ret <<= 1;
-                print!("0");
             }
             (Short, Long) => {
                 ret <<= 1;
                 ret |= 1;
-                print!("1");
             }
             (Short, FiveThousand | Huge) => break,
             comb => return Err(DecodeError::InvalidCombination(comb)),
         }
     }
-    println!("");
+    println!();
     Ok(ret)
 }
 
@@ -152,16 +152,8 @@ fn assert_preamble(
 pub fn decode_message(
     mut pulses: impl Iterator<Item = (PulseType, PulseType)>,
 ) -> Result<u64, DecodeError> {
-
-    let bits = {
-        assert_preamble(&mut pulses)?;
-        decode_bits(&mut pulses)?
-    };
-    
-    let repeated = {
-        assert_preamble(&mut pulses)?;
-        decode_bits(&mut pulses)?
-    };
+    let bits = decode_bits(&mut pulses)?;
+    let repeated = decode_bits(&mut pulses)?;
 
     if bits ^ repeated != 0xFFFF_FFFF_FFFF {
         return Err(DecodeError::RepeatMismatch);
