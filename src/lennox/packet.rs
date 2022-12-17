@@ -1,6 +1,5 @@
 use super::{ControlState, Fan, Mode};
 use bitfield::bitfield;
-use rbroadlink::network::util::checksum;
 use thiserror::Error;
 
 #[derive(Error, Clone, Copy, Debug)]
@@ -53,11 +52,11 @@ impl Packet {
     const MODE_FAN: u8 = 0b100;
 
     // Fans
+    const FAN_ZERO: u8 = 0b000; // Used in some modes where the fan is automatically controlled already
     const FAN_MIN: u8 = 0b001;
     const FAN_MEDIUM: u8 = 0b010;
     const FAN_MAX: u8 = 0b011;
-    const FAN_AUTO: u8 = 0b100;
-    const FAN_ZERO: u8 = 0b000;
+    const FAN_AUTO: u8 = 0b100; 
 
 
     const ONES: u16 = 0xFFFF;
@@ -136,11 +135,12 @@ impl Packet {
 
 
     fn compute_checksum(&self) -> u8 {
+        // Adapted from https://github.com/efficks/lennoxir/blob/master/common.py
         let mut packet = Packet(self.0);
         packet.set_checksum(0);
 
         let mut sum: u8 = 0x00;
-        for &v in packet.0.to_be_bytes().iter() {
+        for &v in packet.0.to_ne_bytes().iter() {
             sum = sum.wrapping_add(rev(v) as _);
         }
         rev(u8::MAX - sum + 1)

@@ -163,16 +163,29 @@ pub enum DecodeError {
 
 #[cfg(test)]
 mod test {
+    use crate::broadlink::{Pulse, Recording, Transport};
+
     use super::*;
 
     #[test]
     fn test_decode() {
+        const MSG: u64 = 0xa12347ffffeb;
         let off = include_str!("../../captures/off.ir");
-        let message =
-            crate::broadlink::Recording::from_bytes(hex::decode(off).unwrap().into()).unwrap();
-        let msg = Phy::new()
+        let message = Recording::from_bytes(hex::decode(off).unwrap().into()).unwrap();
+
+        let phy = Phy::new();
+        let msg = phy
             .decode(message.pulses.iter().map(|x| x.duration))
             .unwrap();
-        assert_eq!(msg, 0xa12347ffffeb)
+        assert_eq!(msg, MSG);
+
+        let encoded = phy.encode(MSG).unwrap();
+        let recording = Recording {
+            repeat_count: 0,
+            transport: Transport::Ir,
+            pulses: encoded.into_iter().map(|x| Pulse { duration: x }).collect(),
+        };
+        let recording_bytes = recording.to_bytes();
+        assert_eq!(hex::encode(recording_bytes), off);
     }
 }
