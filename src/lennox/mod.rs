@@ -1,13 +1,15 @@
 pub mod phy;
+use clap::Parser;
 pub use phy::*;
 pub mod packet;
 
 // The complete state sent to the heat pump
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Parser)]
 pub struct ControlState {
-    // Power state
+    /// Power state
     pub power: bool,
 
+    /// Operating mode
     pub mode: Mode,
 
     // Silence FP
@@ -29,7 +31,7 @@ pub struct ControlState {
     pub fan: Fan,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::EnumString)]
 pub enum Fan {
     Min,
     Medium,
@@ -38,11 +40,11 @@ pub enum Fan {
     Zero,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::EnumString)]
 pub enum Mode {
     Auto,
     Cool,
     Dry,
     Heat,
-    Fan
+    Fan,
 }
