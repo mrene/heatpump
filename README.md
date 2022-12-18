@@ -1,5 +1,10 @@
 This is a very quick and dirty implementation of an IR encoder/decoder for a Lennox Heat pump unit for use with a Broadlink RM4 Mini
 
+## Device
+- Remote model: RG57A6/BGEFU1
+- Heat pump: MWMA018S4-2P
+
+
 ## Usage
 
 ### generate ir code

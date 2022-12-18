@@ -68,6 +68,10 @@ impl Recording {
         }
     }
 
+    pub fn to_pulses(&self) -> Vec<u32> {
+        self.pulses.iter().map(|p| p.as_micros() as _).collect()
+    }
+
     pub fn to_bytes(&self) -> Bytes {
         let mut b = BytesMut::new();
         b.put_u8(self.transport as u8);

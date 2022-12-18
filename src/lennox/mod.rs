@@ -23,7 +23,7 @@ pub struct ControlState {
     pub fan: Fan,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::EnumString)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::EnumString, strum::EnumIter, strum::AsRefStr)]
 pub enum Fan {
     Min,
     Medium,
@@ -32,7 +32,7 @@ pub enum Fan {
     Zero,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::EnumString)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::EnumString, strum::EnumIter, strum::AsRefStr)]
 pub enum Mode {
     Auto,
     Cool,
