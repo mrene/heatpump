@@ -72,6 +72,23 @@ impl Recording {
         self.pulses.iter().map(|p| p.as_micros() as _).collect()
     }
 
+    pub fn to_raw_format(&self) -> String {
+        use std::fmt::Write;
+
+        let mut sign = false;
+        let mut out = String::new();
+        self.pulses.iter().for_each(|p| {
+            sign = !sign;
+            if sign {
+                write!(out, "+").unwrap();
+            } else {
+                write!(out, "-").unwrap();
+            }
+            write!(out, "{} ", p.as_micros()).unwrap();
+        });
+        out
+    }
+
     pub fn to_bytes(&self) -> Bytes {
         let mut b = BytesMut::new();
         b.put_u8(self.transport as u8);
