@@ -1,12 +1,12 @@
 use std::{
     collections::HashMap,
     io::{self, Write},
-    path::Path,
 };
 
 use bytes::Bytes;
 use clap::Parser;
 use irp::InfraredData;
+use modem::DeviceError;
 
 use crate::{
     broadlink::Recording,
@@ -15,6 +15,7 @@ use crate::{
 
 mod broadlink;
 mod lennox;
+mod modem;
 mod pwm;
 mod smartir;
 
@@ -44,8 +45,27 @@ enum SubCommand {
 
     /// Generate a SmartIR code file from all possible states
     SmartIR,
-    
+
+    /// Reads a single IR command from a broadlink device
     ReadIr,
+
+    // New structure commands
+    Copy {
+        #[clap(short='i', long="input", default_value="lines:hex")]
+        input: modem::DeviceType,
+        #[clap(short='o', long="output", default_value="lines:base64")]
+        output: modem::DeviceType,
+        #[clap(short='c', long="count")]
+        count: Option<usize>,
+    },
+
+    // Demod {
+    //     #[clap(short='i', long="input", default_value="lines:hex")]
+    //     input: modem::DeviceType,
+
+    //     #[clap(short='c', long="count")]
+    //     count: Option<usize>,
+    // }
 }
 
 /// Read hex-encoded messages from stdin, convert them and print their decoded u64 hex value
@@ -196,13 +216,11 @@ fn irp_decode() -> anyhow::Result<()> {
 fn irp_decode_one(protocol: &str, data: &Recording) -> anyhow::Result<HashMap<String, i64>> {
     use irp::Irp;
 
-    let irp = Irp::parse(protocol)
-        .expect("irp parse");
+    let irp = Irp::parse(protocol).expect("irp parse");
 
     dbg!(&irp);
-    
-    let nfa = irp.compile()
-        .expect("irp compile");
+
+    let nfa = irp.compile().expect("irp compile");
 
     let pulses = InfraredData::from_u32_slice(&data.to_pulses());
 
@@ -251,6 +269,30 @@ fn read_ir() -> anyhow::Result<()> {
     Ok(())
 }
 
+fn copy(input: modem::DeviceType, output: modem::DeviceType, mut count: Option<usize>) -> anyhow::Result<()> {
+    let mut input = modem::create_device(input);
+    let mut output = modem::create_device(output);
+    
+    loop {
+        match input.recv() {
+            Ok(msg) => {
+                output.send(&msg)?;
+                count = match count {
+                    None => None,
+                    Some(1) => break,
+                    Some(n) => Some(n - 1),
+                }
+            },
+            Err(DeviceError::EOF) => break,
+            Err(e) => {
+                println!("Error: {}", e);
+            }
+        }
+    }
+
+    Ok(())
+}
+
 fn main() -> anyhow::Result<()> {
     let opts: Opts = Opts::parse();
     match opts.subcmd {
@@ -261,6 +303,7 @@ fn main() -> anyhow::Result<()> {
         SubCommand::IrpGrep => irp_grep(),
         SubCommand::SmartIR => smartir::gen_smartir(),
         SubCommand::ReadIr => read_ir(),
+        SubCommand::Copy { input, output, count } => copy(input, output, count),
     }
 }
 
@@ -269,6 +312,6 @@ mod test {
     #[test]
     fn test() {
         let b = r"JgDKAIyREjQSEhI0EjUTERESETUTERETETQSEhISETUSNBISEjQTNBISEhESNBM0EjQTNBM0EhISNBI0ExESERISEhESERISEhESNBM0EjQTNBISEhESNBM0EhISERIREhISNBI0E6qRkBM0ExESNBI0ExESEhI0EhISERI0EhISERI0EzQSEhE1EjQTERETETUSNBI1ETUSNRIREjUSNRESEhIREhESERMREhESETUSNRI0EjUSEhATETUSNRISERIQFA8TETYQNhEADQUAAAAAAAAAAAAAAAAAAA==";
-        let d = base64::decode(b).unwrap();
+        let d = base64::decode(b).unwrap(); 
     }
 }

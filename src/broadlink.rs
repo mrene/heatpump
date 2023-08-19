@@ -131,11 +131,18 @@ impl Recording {
 
             if value == 0 {
                 // This indicates that the value didn't fit in a single byte and is stored as a u16_be
+                if buf.len() < 2 {
+                    break;
+                }
                 value = buf.get_u16();
                 remain -= 2;
             }
 
             pulses.push(Duration::from_broadlink(value));
+        }
+
+        if pulses.len() % 2 != 0 {
+            pulses.push(Duration::from_millis(100));
         }
 
         Ok(Recording {
